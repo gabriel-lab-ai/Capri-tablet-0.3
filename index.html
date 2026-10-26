@@ -1,0 +1,211 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  :root{--c:#8a5cff}
+  html,body{margin:0;height:100%;background:transparent;overflow:hidden;user-select:none;font-family:"Courier New",monospace}
+  #stage{position:absolute;inset:0;transform-origin:50% 100%}
+  body[data-state=dormant]{--c:#8a5cff} body[data-state=listening]{--c:#2ee6ff}
+  body[data-state=thinking]{--c:#ffd62e} body[data-state=talking]{--c:#ffd62e} body[data-state=error]{--c:#ff3b5c}
+
+  /* toast / choice bubble */
+  #bubble{position:absolute;left:30px;right:30px;display:none;background:#14121f;color:#e8e4ff;border:2px solid #8a5cff;
+    padding:10px 12px;font-size:13px;line-height:1.35;box-shadow:4px 4px 0 #8a5cff55}
+  .mode-orb #bubble{bottom:150px} .mode-body #bubble{bottom:240px}
+  #bubble .head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  #bubble .name{font-size:10px;color:#8a5cff;letter-spacing:2px}
+  #avatar{width:38px;height:38px;border:2px solid #8a5cff;background:url(assets/intro.gif) 52% 46%/260% auto no-repeat}
+  #bubble button{display:block;width:100%;margin-top:6px;background:#8a5cff;border:0;color:#fff;padding:5px;font:inherit;font-size:11px;text-transform:uppercase;letter-spacing:1px;cursor:pointer}
+  #bubble button:hover{background:#a98aff}
+
+  /* ---- orb (dormant satellite) ---- */
+  #orbwrap{position:absolute;left:50%;bottom:14px;margin-left:-60px;width:120px;text-align:center;display:none}
+  .mode-orb #orbwrap{display:block} .mode-orb.awake #orbwrap{display:none}
+  #orb{width:96px;height:96px;margin:0 12px;cursor:pointer;filter:drop-shadow(0 0 10px #2ee6ff88);animation:float 3s ease-in-out infinite}
+  #spikes{transform-origin:50px 50px;animation:spin 14s linear infinite}
+  body[data-state=listening] #spikes{animation-duration:3s} body[data-state=thinking] #spikes{animation-duration:.8s}
+  #iris{animation:look 5s ease-in-out infinite}
+  .tag{display:inline-block;margin-top:4px;padding:1px 6px;font-size:9px;letter-spacing:1px;color:var(--c);border:1px solid var(--c);background:#05080fcc;white-space:nowrap}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes float{50%{transform:translateY(-8px)}}
+  @keyframes look{0%,100%{transform:translate(0,0)}30%{transform:translate(3px,-2px)}65%{transform:translate(-3px,2px)}}
+
+  /* ---- awake panel ---- */
+  #panel{position:absolute;left:30px;right:30px;bottom:14px;display:none}
+  .mode-orb.awake #panel{display:block}
+  #term{border:1.5px solid var(--c);background:#05080fee;color:#cfe;font-size:12px;line-height:1.4;padding:8px 10px;margin-bottom:14px;
+    clip-path:polygon(0 0,100% 0,100% calc(100% - 10px),55% calc(100% - 10px),50% 100%,45% calc(100% - 10px),0 calc(100% - 10px));padding-bottom:16px}
+  #you{color:#789;font-size:11px;min-height:14px;white-space:pre-wrap}
+  #cap{min-height:34px;white-space:pre-wrap}
+  #cap b{color:#ffd62e;font-weight:normal}
+  .caret::after{content:"\2588";animation:cur 1s steps(2) infinite}
+  @keyframes cur{50%{opacity:0}}
+  #inrow{display:flex;gap:6px;margin-top:4px;color:var(--c);font-size:11px}
+  #inp{flex:1;background:transparent;border:0;outline:0;color:#e8f4ff;font:inherit;font-size:12px;user-select:text}
+  #frame{position:relative;border:2px solid var(--c);aspect-ratio:16/9;background:#c00 url(assets/intro.gif) center/cover;box-shadow:0 0 14px var(--c)}
+  #frame .tag{position:absolute;top:-1px;left:-1px;margin:0;background:var(--c);color:#05080f;border-color:var(--c);font-weight:bold}
+  #frame i{position:absolute;width:14px;height:14px;border:3px solid var(--c)}
+  #frame i:nth-of-type(1){left:-6px;top:-6px;border-right:0;border-bottom:0} #frame i:nth-of-type(2){right:-6px;top:-6px;border-left:0;border-bottom:0}
+  #frame i:nth-of-type(3){left:-6px;bottom:-6px;border-right:0;border-top:0} #frame i:nth-of-type(4){right:-6px;bottom:-6px;border-left:0;border-top:0}
+  #frame::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,#0000 0 2px,#0003 2px 3px);pointer-events:none}
+  .glitch-in{animation:gin .55s steps(1) 1} .glitch-out{animation:gout .45s steps(1) 1 forwards}
+  @keyframes gin{0%{clip-path:inset(48% 0 48% 0);transform:translateX(-20px)}20%{clip-path:inset(10% 0 70% 0);transform:translateX(14px)}
+    40%{clip-path:inset(60% 0 8% 0);transform:translateX(-10px);filter:hue-rotate(90deg)}60%{clip-path:inset(0 0 30% 0);transform:translateX(6px)}80%{clip-path:inset(20% 0 0 0);transform:none;filter:hue-rotate(-60deg)}100%{clip-path:inset(0)}}
+  @keyframes gout{0%{clip-path:inset(0)}25%{clip-path:inset(40% 0 10% 0);transform:translateX(12px);filter:hue-rotate(90deg)}50%{clip-path:inset(5% 0 70% 0);transform:translateX(-14px)}
+    75%{clip-path:inset(48% 0 48% 0)}100%{clip-path:inset(50% 0 50% 0)}}
+
+  /* ---- full body mode ---- */
+  #pet{position:absolute;left:85px;bottom:0;width:230px;height:230px;cursor:grab;display:none}
+  .mode-body #pet{display:block}
+  #sprite{width:100%;height:100%;display:block;pointer-events:none;filter:drop-shadow(0 6px 8px #0008)}
+  #flip{width:100%;height:100%;transform-origin:50% 100%}
+  .bob{width:100%;height:100%;transform-origin:50% 100%;animation:bob 2.6s ease-in-out infinite}
+  .walk .bob{animation:walk .5s ease-in-out infinite}
+  @keyframes bob{50%{transform:translateY(-8px) rotate(1deg)}}
+  @keyframes walk{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-10px) rotate(3deg)}}
+  .alert #orb,.alert #pet{animation:glitch .25s steps(2) 6}
+  @keyframes glitch{0%{filter:hue-rotate(90deg);transform:translateX(-4px)}100%{filter:hue-rotate(-90deg);transform:translateX(4px)}}
+</style></head>
+<body class="mode-orb" data-state="dormant">
+<div id="stage">
+  <div id="bubble"><div class="head"><div id="avatar"></div><div class="name">CAPRI</div></div><div id="txt"></div><div id="choices"></div></div>
+
+  <div id="orbwrap">
+    <svg id="orb" viewBox="0 0 100 100">
+      <g id="spikes">
+        <polygon points="50,2 56,34 44,34" fill="#ff3b5c"/><polygon points="98,50 66,56 66,44" fill="#3ddc6a"/>
+        <polygon points="50,98 44,66 56,66" fill="#ff3b5c"/><polygon points="2,50 34,44 34,56" fill="#3ddc6a"/>
+        <polygon points="84,16 62,38 56,30" fill="#ff3b5c"/><polygon points="84,84 62,62 70,56" fill="#3ddc6a"/>
+        <polygon points="16,84 38,62 44,70" fill="#ff3b5c"/><polygon points="16,16 38,38 30,44" fill="#3ddc6a"/>
+      </g>
+      <circle cx="50" cy="50" r="19" fill="#0a1020" stroke="#2ee6ff" stroke-width="2"/>
+      <g id="iris"><circle cx="50" cy="50" r="10" fill="#1d6bff"/><circle cx="50" cy="50" r="4.5" fill="#05080f"/><circle cx="47" cy="47" r="2" fill="#fff"/></g>
+    </svg>
+    <span class="tag" id="orbtag">CAPRI // DORMANT</span>
+  </div>
+
+  <div id="panel">
+    <div id="term"><div id="you"></div><div id="cap"></div>
+      <div id="inrow"><span>YOU &gt;</span><input id="inp" placeholder="say something..." autocomplete="off" spellcheck="false"></div></div>
+    <div id="frame"><span class="tag" id="ptag">CAPRI // LISTENING</span><i></i><i></i><i></i><i></i></div>
+  </div>
+
+  <div id="pet"><div id="flip"><div class="bob"><img id="sprite" src="assets/capri.png" draggable="false"></div></div></div>
+</div>
+<script>
+const $ = id => document.getElementById(id), B = document.body;
+let awake=false, voiceOn=true, sleepT, typeT, busy=false;
+const LABEL={dormant:'DORMANT',listening:'LISTENING',thinking:'THINKING',talking:'TALKING',error:'SIGNAL LOST'};
+function setState(s){ B.dataset.state=s; $('orbtag').textContent=$('ptag').textContent='CAPRI // '+LABEL[s]; }
+
+// ----- state from main -----
+window.pet.onState(s=>{
+  if('mode' in s){ B.classList.remove('mode-orb','mode-body'); B.classList.add('mode-'+s.mode); if(s.mode==='body') sleep(true); }
+  if('voice' in s) voiceOn=s.voice;
+  if('walking' in s) B.classList.toggle('walk', s.walking);
+  if('dir' in s) $('flip').style.transform = `scaleX(${s.dir})`;
+  if('scale' in s) $('stage').style.transform = `scale(${s.scale})`;
+  if(s.alert){B.classList.add('alert');setTimeout(()=>B.classList.remove('alert'),1600);}
+});
+
+// ----- toast / choice bubble (hooks + body mode menu) -----
+const bubble=$('bubble'), txt=$('txt'), choices=$('choices');
+const LABELS={icon:"Where's my icon?",claude:"Where's Claude?",folder:"Claude's folder",nothing:'Nothing, thanks'};
+let hideT, bT;
+window.pet.onSay(({text,choices:ch})=>{
+  if(awake) return;
+  clearTimeout(hideT); clearInterval(bT);
+  bubble.style.display='block'; txt.textContent=''; choices.innerHTML='';
+  let i=0; bT=setInterval(()=>{ txt.textContent=text.slice(0,++i); if(i>=text.length) clearInterval(bT); },22);
+  ch.forEach(id=>{ const b=document.createElement('button'); b.textContent=LABELS[id]; b.onclick=()=>window.pet.choice(id); choices.appendChild(b); });
+  if(!ch.length) hideT=setTimeout(()=>bubble.style.display='none',4500);
+});
+
+// ----- wake / sleep with glitch -----
+function glitch(el,cls){ el.classList.remove('glitch-in','glitch-out'); void el.offsetWidth; el.classList.add(cls); }
+async function wake(){
+  if(awake) return; awake=true; audio(); bubble.style.display='none';
+  B.classList.add('awake'); noiseBurst(); glitch($('panel'),'glitch-in'); setState('listening');
+  window.pet.focus(); setTimeout(()=>$('inp').focus(),100);
+  if(!$('cap').textContent) { say('Oh. You again. Net has been quiet. Say something.'); }
+  armSleep();
+}
+function sleep(instant){
+  if(!awake) return; awake=false; clearTimeout(sleepT);
+  const done=()=>{ B.classList.remove('awake'); $('panel').classList.remove('glitch-out'); setState('dormant'); };
+  if(instant) return done();
+  glitch($('panel'),'glitch-out'); setTimeout(done,450);
+}
+function armSleep(){ clearTimeout(sleepT); sleepT=setTimeout(()=>{ if(!busy) sleep(); else armSleep(); },30000); }
+
+// ----- typewriter + voice + sound -----
+let actx=null;
+function audio(){ try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)(); if(actx.state==='suspended') actx.resume(); }catch{} return actx; }
+function blip(){ const a=audio(); if(!a||!voiceOn) return; const o=a.createOscillator(), g=a.createGain(); o.type='square';
+  o.frequency.value=340+Math.random()*380; g.gain.setValueAtTime(.025,a.currentTime); g.gain.exponentialRampToValueAtTime(.0001,a.currentTime+.05);
+  o.connect(g).connect(a.destination); o.start(); o.stop(a.currentTime+.06); }
+function noiseBurst(){ const a=audio(); if(!a||!voiceOn) return; const n=a.sampleRate*.35, b=a.createBuffer(1,n,a.sampleRate), d=b.getChannelData(0);
+  for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n)*(Math.random()<.5?1:.2);
+  const s=a.createBufferSource(), g=a.createGain(); g.gain.value=.06; s.buffer=b; s.connect(g).connect(a.destination); s.start(); }
+const kv=(k,v)=>{ try{ if(v===undefined) return localStorage.getItem(k); localStorage.setItem(k,v);}catch{} };
+function voices(){ return (window.speechSynthesis?speechSynthesis.getVoices():[]).filter(v=>/^en/i.test(v.lang)); }
+function pickVoice(){ const vs=voices(); if(!vs.length) return null;
+  const saved=kv('capri_voice'); const s=vs.find(v=>v.name===saved); if(s) return s;
+  const score=v=>(/natural|neural|online/i.test(v.name)?4:0)+(/google uk english female|samantha|zira|aria|jenny|sonia|karen|moira|female/i.test(v.name)?2:0)+(v.localService?0:1);
+  return vs.slice().sort((a,b)=>score(b)-score(a))[0]; }
+function speak(text){
+  if(!voiceOn||!window.speechSynthesis) return;
+  try{ speechSynthesis.cancel(); const v=pickVoice();
+    (text.match(/[^.,!?;:]+[.,!?;:]*/g)||[text]).forEach(part=>{ const u=new SpeechSynthesisUtterance(part.trim()); if(v) u.voice=v;
+      const end=part.trim().slice(-1); u.pitch=(end==='?'?1.5:end==='!'?1.35:1.05)+Math.random()*.25; u.rate=1.1+Math.random()*.2+(end===','?.1:0); speechSynthesis.speak(u); }); }catch{}
+}
+function say(text, then){
+  clearInterval(typeT); setState('talking'); busy=true;
+  const cap=$('cap'); cap.innerHTML='<b>CAPRI &gt;</b> '; const span=document.createElement('span'); cap.appendChild(span); span.className='caret';
+  speak(text);
+  let i=0; typeT=setInterval(()=>{ span.textContent=text.slice(0,++i); if(i%2===0 && text[i-1]!==' ') blip();
+    if(i>=text.length){ clearInterval(typeT); span.className=''; busy=false; if(awake) setState('listening'); armSleep(); } },28);
+}
+
+// ----- chat input -----
+$('inp').addEventListener('keydown',async e=>{
+  if(e.key==='Escape') return sleep();
+  if(e.key!=='Enter') return;
+  const t=e.target.value.trim(); if(!t||busy) return; e.target.value='';
+  $('you').textContent='> you: '+t.replace(/^\/key .*/,'/key ********');
+  if(/^\/voice/.test(t)){
+    const vs=voices(), n=parseInt(t.split(/\s+/)[1]);
+    if(n>=1 && vs[n-1]){ kv('capri_voice',vs[n-1].name); $('you').textContent='> you: '+t; return say('Voice set: '+vs[n-1].name+'. How do I sound?'); }
+    $('you').textContent='> you: /voice'; const cur=pickVoice();
+    return say(vs.length? 'Voices: '+vs.slice(0,8).map((v,k)=>(k+1)+'='+v.name.replace(/Microsoft |Google /,'')).join(', ')+'. Type /voice NUMBER. Now: '+(cur?cur.name:'none') : 'No voices found on this device.');
+  }
+  setState('thinking'); busy=true; $('cap').innerHTML='<b>CAPRI &gt;</b> decrypting ...';
+  armSleep();
+  const r = await window.pet.chat(t);
+  if(/^Signal lost/.test(r)){ setState('error'); }
+  say(r);
+});
+
+// ----- click-through except over interactive parts -----
+let ignoring=true;
+document.addEventListener('mousemove',e=>{
+  const el=document.elementFromPoint(e.clientX,e.clientY);
+  const over = el && (el.closest('#orb,#pet,#bubble,#panel'));
+  if(!!over===ignoring){ ignoring=!over; window.pet.setIgnore(ignoring); }
+});
+
+// ----- drag / click / context -----
+let down=null, moved=false, target=null;
+document.addEventListener('mousedown',e=>{
+  if(e.button!==0) return;
+  const t=e.target.closest('#orb,#pet,#frame'); if(!t) return;
+  target=t.id; down={x:e.screenX,y:e.screenY}; moved=false; window.pet.dragStart();
+});
+window.addEventListener('mousemove',e=>{ if(!down) return;
+  const dx=e.screenX-down.x, dy=e.screenY-down.y;
+  if(Math.abs(dx)+Math.abs(dy)>4) moved=true;
+  if(moved) window.pet.dragMove(dx,dy); });
+window.addEventListener('mouseup',()=>{ if(!down) return; down=null; window.pet.dragEnd();
+  if(moved) return;
+  if(target==='orb') wake(); else if(target==='pet') window.pet.clicked(); });
+document.addEventListener('contextmenu',e=>{ if(e.target.closest('#orb,#pet,#frame')){ e.preventDefault(); window.pet.context(); }});
+</script></body></html>
