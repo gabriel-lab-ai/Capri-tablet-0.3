@@ -10,3 +10,8 @@
 - Drag the orb to move it. Right-click it, or use the tray icon, for the menu:
   Mode (orb / full body), Voice, Size, Start with Windows, Claude Code hooks.
 - Tray > "Install Claude Code hooks" makes her react to Claude Code (backs up settings.json first).
+
+## Brain options
+- Anthropic key (`sk-ant-...`, paid) or a Google Gemini key (`AIza...`, from Google AI Studio; check their current free limits).
+- `/key YOUR_KEY` sets it, `/key clear` removes it. A rejected key is dropped automatically.
+- No key: she uses a built-in offline personality (jokes, small talk, remembers your name).

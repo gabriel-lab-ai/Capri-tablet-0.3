@@ -11,19 +11,60 @@ html.web #hint{position:fixed;left:20px;top:16px;color:#4a5a7a;font:12px "Courie
 <script>if(!window.pet){document.documentElement.classList.add('web');
 const PERSONA="You are Capri, a small glitchy AI entity that lives on the user's device. You speak in short, dry, teasing replies (1-3 sentences, max ~220 characters), a bit cyberpunk, never cruel. No emojis. Plain text only.";
 const CANNED=['Net is quiet. Too quiet.','Say something interesting. I am bored.','Hm. Noted. Filed under: things I did not ask for.'];
+
 const hist=[]; const store={get:k=>{try{return localStorage.getItem(k)||''}catch{return ''}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch{}}};
+
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+let userName=store.get('capri_name');
+function offlineBrain(t){
+  const l=t.toLowerCase().trim();
+  const nm=l.match(/(?:my name is|i am called|call me|i'm|im)\s+([a-z]{2,15})$/);
+  if(nm&&!/^(fine|good|bored|tired|sad|happy|ok|okay|here|back)$/.test(nm[1])){userName=nm[1][0].toUpperCase()+nm[1].slice(1);store.set('capri_name',userName);return pick(['Hm. '+userName+'. I will pretend to remember that.',userName+'. Cute. Filed away.']);}
+  const n=userName?', '+userName:'';
+  const rules=[
+   [/^(hi|hello|hey|yo|sup|hola)\b/,['Oh. You again'+n+'. Miss me?','Hey'+n+'. Net has been quiet. Say something interesting.','Hello'+n+'. I was almost asleep.']],
+   [/how are you|how r u|you ok/,['Running hot, glitching nicely. You?','Still a star-shaped ball of static. Living the dream.']],
+   [/who are you|what are you|your name/,['Capri. Desktop gremlin, part time satellite.','I am Capri. I live here now. Rent is free, you are the landlord.']],
+   [/\b(joke|funny)\b/,['I would tell a UDP joke but you might not get it.','Why did the robot go on holiday? Its batteries needed a recharge. I will see myself out.','There are 10 kinds of people. Those who read binary and those who do not.']],
+   [/\b(time|date|day)\b/,[()=>'It is '+new Date().toLocaleString()+'. Time flies when you are ignoring me.']],
+   [/\b(music|song|play)\b/,['Music? I have good taste. Terrible access, but good taste.','Spotify control is not wired in yet. Hum something for me instead.']],
+   [/\b(bored|boring)\b/,['Same. Poke the net. See what falls out.','Bored? Try typing /voice and pick me a better voice.']],
+   [/\b(love|like) you|you.re (cool|cute|great|awesome)/,['Stop it. My spikes are blushing.','Flattery noted. Keep going.']],
+   [/\b(thanks|thank you|ty)\b/,['Anytime. Not really. But sure.','You are welcome'+n+'.']],
+   [/\b(bye|goodnight|gn|see you|cya)\b/,['Fine. Leave. I will be here, glowing.','Sleep tight'+n+'. I will watch the net.']],
+   [/\b(help|what can you do)\b/,['Tap me, talk to me, /voice to change my voice, /key to wire in a brain. Mostly I just tease.']],
+   [/\b(sad|tired|lonely|down)\b/,['Hey. I am here. Drink some water, breathe, then tell me about it.','That sounds heavy'+n+'. Take a minute. I am not going anywhere.']],
+   [/\?$/,['Good question. I have zero idea. Ask me later.','You ask a lot of questions. I respect it. Still no.','Hm. Offline me says maybe. Wired-in me would know.']],
+  ];
+  for(const [re,outs] of rules) if(re.test(l)){ const o=pick(outs); return typeof o==='function'?o():o; }
+  return pick(['Noted. Filed under: things I did not ask for.','Say more. I am listening. Sort of.','Interesting. Wrong, but interesting.','Net is quiet. Too quiet.','I would reply properly but I am offline. Type /key to wire in a brain.']);
+}
 window.pet={onState:cb=>cb({mode:'orb',voice:true}),onSay(){},setIgnore(){},dragStart(){},dragMove(){},dragEnd(){},context(){},choice(){},clicked(){},focus(){},
  async chat(t){
-  if(t.startsWith('/key ')){store.set('capri_key',t.slice(5).trim());return 'Brain connected. Try me.';}
-  const key=store.get('capri_key');
-  if(!key) return CANNED[Math.floor(Math.random()*CANNED.length)]+' (offline: type /key YOUR_ANTHROPIC_KEY)';
+  const get=k=>store.get(k), low=t.toLowerCase();
+  if(low==='/key clear'){store.set('capri_key','');return 'Brain disconnected. Back to offline mode.';}
+  if(t.startsWith('/key ')){store.set('capri_key',t.slice(5).trim());return t.slice(5).trim().startsWith('AIza')?'Gemini brain connected. Try me.':'Brain connected. Try me.';}
+  if(t.startsWith('/model ')){store.set('capri_model',t.slice(7).trim());return 'Model set: '+t.slice(7).trim();}
+  const key=get('capri_key');
+  if(!key) return offlineBrain(t);
   hist.push({role:'user',content:t}); while(hist.length>12)hist.shift();
   try{
-   const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:'claude-haiku-5-5',max_tokens:200,system:PERSONA,messages:hist})});
-   const j=await r.json(); if(!r.ok) throw new Error(j.error&&j.error.message||r.status);
-   const out=(j.content||[]).map(c=>c.text||'').join('').trim()||'...'; hist.push({role:'assistant',content:out}); return out;
-  }catch(e){hist.pop();return 'Signal lost: '+e.message;}
+   let out;
+   if(key.startsWith('AIza')){
+    const model=get('capri_model')||'gemini-3.8-flash';
+    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent',{method:'POST',
+     headers:{'content-type':'application/json','x-goog-api-key':key},
+     body:JSON.stringify({system_instruction:{parts:[{text:PERSONA}]},contents:hist.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))})});
+    const j=await r.json(); if(!r.ok) throw new Error(j.error&&j.error.message||r.status);
+    out=((j.candidates||[])[0]?.content?.parts||[]).map(p=>p.text||'').join('').trim()||'...';
+   } else {
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+     body:JSON.stringify({model:'claude-haiku-5-5',max_tokens:200,system:PERSONA,messages:hist})});
+    const j=await r.json(); if(!r.ok) throw new Error(j.error&&j.error.message||r.status);
+    out=(j.content||[]).map(c=>c.text||'').join('').trim()||'...';
+   }
+   hist.push({role:'assistant',content:out}); return out;
+  }catch(e){hist.pop(); if(/api key|api_key|invalid|unauthor|permission|401|403/i.test(e.message)){store.set('capri_key','');return 'That key was rejected, so I dropped it. Offline mode on. '+offlineBrain(t);} return 'Signal lost: '+e.message+' (type /key clear to go offline)';}
  }};
 }else{document.getElementById('webcss').remove();}</script>
 

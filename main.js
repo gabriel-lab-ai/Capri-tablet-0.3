@@ -147,15 +147,28 @@ function setMode(k) {
 }
 
 const PERSONA = `You are Capri, a small glitchy AI entity that lives on the user's desktop. You speak in short, dry, teasing replies (1-3 sentences, max ~220 characters), a bit cyberpunk, never cruel. You can see the user's desktop only through Claude Code hooks. No emojis. Plain text only.`;
-const CANNED = ['Net is quiet. Too quiet.', 'Say something interesting. I am bored.', 'Hm. Noted. Filed under: things I did not ask for.', 'I would help, but I have no brain connected. Type /key followed by an API key.'];
+const CANNED = ['Noted. Filed under: things I did not ask for.', 'Interesting. Wrong, but interesting.', 'Say more. I am listening. Sort of.', 'Net is quiet. Too quiet.', 'Say something interesting. I am bored.', 'Hm. Noted. Filed under: things I did not ask for.', 'I would help, but I have no brain connected. Type /key followed by an API key.'];
 
 async function chat(text) {
   text = String(text || '').trim();
   if (text.startsWith('/key ')) { cfg.apiKey = text.slice(5).trim(); saveCfg(); return 'Brain connected. Try me.'; }
-  if (!cfg.apiKey) return CANNED[Math.floor(Math.random() * CANNED.length)] + ' (offline: type /key YOUR_ANTHROPIC_KEY)';
+  if (text === '/key clear') { cfg.apiKey = ''; saveCfg(); return 'Brain disconnected. Back to offline mode.'; }
+  if (!cfg.apiKey) return CANNED[Math.floor(Math.random() * CANNED.length)] + ' (offline: type /key with an Anthropic or Gemini key)';
   history.push({ role: 'user', content: text });
   while (history.length > 12) history.shift();
   try {
+    if (cfg.apiKey.startsWith('AIza')) {
+      const gr = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + (cfg.model || 'gemini-3.8-flash') + ':generateContent', {
+        method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': cfg.apiKey },
+        body: JSON.stringify({ system_instruction: { parts: [{ text: PERSONA }] },
+          contents: history.map(h => ({ role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: h.content }] })) }),
+      });
+      const gj = await gr.json();
+      if (!gr.ok) throw new Error(gj.error && gj.error.message || gr.status);
+      const gout = ((gj.candidates || [])[0]?.content?.parts || []).map(p => p.text || '').join('').trim() || '...';
+      history.push({ role: 'assistant', content: gout });
+      return gout;
+    }
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01' },
@@ -166,7 +179,9 @@ async function chat(text) {
     const out = (j.content || []).map(c => c.text || '').join('').trim() || '...';
     history.push({ role: 'assistant', content: out });
     return out;
-  } catch (e) { history.pop(); return 'Signal lost: ' + e.message; }
+  } catch (e) { history.pop();
+    if (/api key|api_key|invalid|unauthor|permission|401|403/i.test(e.message)) { cfg.apiKey = ''; saveCfg(); return 'That key was rejected, so I dropped it. Offline mode on.'; }
+    return 'Signal lost: ' + e.message; }
 }
 ipcMain.handle('chat', (_e, t) => chat(t));
 ipcMain.on('focus', () => { win.setIgnoreMouseEvents(false); win.focus(); });
