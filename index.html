@@ -1,5 +1,32 @@
 <!doctype html>
 <html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<style id="webcss">html.web,html.web body{background:radial-gradient(ellipse at 30% 20%,#14203a,#05080f 70%);touch-action:manipulation;-webkit-user-select:none}
+html.web #stage{position:fixed;inset:0}
+html.web #orbwrap{left:auto;right:28px;bottom:28px;margin-left:0;width:150px;transform:scale(1.25);transform-origin:100% 100%}
+html.web #panel{left:auto;right:20px;bottom:20px;width:min(460px,calc(100vw - 40px))}
+html.web #bubble{left:auto;right:20px;width:min(360px,calc(100vw - 80px));bottom:200px !important}
+html.web #inp{font-size:16px}
+html.web #hint{position:fixed;left:20px;top:16px;color:#4a5a7a;font:12px "Courier New",monospace;letter-spacing:1px}</style>
+<script>if(!window.pet){document.documentElement.classList.add('web');
+const PERSONA="You are Capri, a small glitchy AI entity that lives on the user's device. You speak in short, dry, teasing replies (1-3 sentences, max ~220 characters), a bit cyberpunk, never cruel. No emojis. Plain text only.";
+const CANNED=['Net is quiet. Too quiet.','Say something interesting. I am bored.','Hm. Noted. Filed under: things I did not ask for.'];
+const hist=[]; const store={get:k=>{try{return localStorage.getItem(k)||''}catch{return ''}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch{}}};
+window.pet={onState:cb=>cb({mode:'orb',voice:true}),onSay(){},setIgnore(){},dragStart(){},dragMove(){},dragEnd(){},context(){},choice(){},clicked(){},focus(){},
+ async chat(t){
+  if(t.startsWith('/key ')){store.set('capri_key',t.slice(5).trim());return 'Brain connected. Try me.';}
+  const key=store.get('capri_key');
+  if(!key) return CANNED[Math.floor(Math.random()*CANNED.length)]+' (offline: type /key YOUR_ANTHROPIC_KEY)';
+  hist.push({role:'user',content:t}); while(hist.length>12)hist.shift();
+  try{
+   const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:'claude-haiku-5-5',max_tokens:200,system:PERSONA,messages:hist})});
+   const j=await r.json(); if(!r.ok) throw new Error(j.error&&j.error.message||r.status);
+   const out=(j.content||[]).map(c=>c.text||'').join('').trim()||'...'; hist.push({role:'assistant',content:out}); return out;
+  }catch(e){hist.pop();return 'Signal lost: '+e.message;}
+ }};
+}else{document.getElementById('webcss').remove();}</script>
+
 <style>
   :root{--c:#8a5cff}
   html,body{margin:0;height:100%;background:transparent;overflow:hidden;user-select:none;font-family:"Courier New",monospace}
